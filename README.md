@@ -1,3 +1,7 @@
+# 정보
+- [notion](https://app.notion.com/p/Codessey_b2_2-388a042c32f6803c920eebf901430778?source=copy_link)
+- [contrinbuting](./CONTRIBUTE.md) 꼭 읽어보기 (의견 있으면 수정 commit 하고 알려주세요)
+
 # b2_2 뉴스 요약 자동화 워크플로우 만들기
 
 ## 1. 미션 소개
