@@ -27,6 +27,17 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
 ```
 - 이미지 생성 로컬에서 테스트 [image_proxy 호출 예시](image_proxy/README.md#호출-예시)
 
-## 배포된 서버 주소
+## 배포된 서버 주소 test
 - llm_proxy 8080 `210.114.89.138:30000`
+```
+curl -s http://210.114.89.138:30000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"한 줄로 인사해줘"}]}' | jq
+```
 - image_proxy 8081 `210.114.89.138:30001`
+```
+curl -s -X POST http://210.114.89.138:30001/v1/images/generations \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"news thumbnail about AI agents","size":"512x512"}' \
+| python3 -c 'import sys,json,base64;open("out.png","wb").write(base64.b64decode(json.load(sys.stdin)["data"][0]["b64_json"]))'
+```
