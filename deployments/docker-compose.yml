@@ -1,0 +1,35 @@
+services:
+  # Text: /v1/chat/completions via openai-oauth. Waits for auth.json (injected by
+  # `make up` with docker cp) before starting — the host ~/.codex is never
+  # mounted, so the container can't pollute it.
+  llm_proxy:
+    image: node:22-slim
+    command: ["sh", "-c", "until [ -f /root/.codex/auth.json ]; do echo waiting-for-auth; sleep 1; done; exec npx -y openai-oauth --host 0.0.0.0 --port 8080"]
+    environment:
+      CODEX_HOME: /root/.codex
+    volumes:
+      - codex_home:/root/.codex
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  image_proxy:
+    build:
+      context: ../image_proxy
+    image: ghcr.io/guny524/image_proxy:latest
+    platform: linux/amd64
+    environment:
+      IMAGE_PROXY_ADDR: 0.0.0.0:8080
+      IMAGE_PROXY_WORKDIR: /data/images
+    volumes:
+      - codex_home:/root/.codex
+      - image_data:/data/images
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+# codex_home is an isolated named volume (not the host ~/.codex). codex writes
+# auth refresh + generated_images here; `make down` (-v) wipes it.
+volumes:
+  codex_home:
+  image_data:
