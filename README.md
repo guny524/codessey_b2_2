@@ -16,8 +16,8 @@
 본 시스템은 사람의 개입 없이 **매일 오전 10:00 (Asia/Seoul)**에 자동 실행되며, 다음과 같은 단계로 작동합니다.
 
 1. **데이터 수집 (RSS):** 공식 RSS 피드를 제공하는 테크 뉴스 사이트에서 최신 기사를 수집합니다. (저작권 침해 및 불법 크롤링 방지)
-2. **중복 검사 (Notion Search):** 수집된 기사의 원문 링크(URL)를 고유 식별자(Key)로 삼아 노션 DB를 사전 검색하여 중복 여부를 판별합니다.
-3. **주제 필터링 (Filter):** 중복되지 않은 새 기사 중, 설정된 'AI 관련 키워드' 조건에 부합하는 기사만 다음 단계로 통과시킵니다.
+2. **주제 필터링 (Filter):** 수집한 기사 중 제목에 'AI 관련 키워드'(AI·인공지능·생성형 AI·LLM·GPT·오픈소스)가 포함된 기사만 다음 단계로 통과시킵니다.
+3. **중복 검사 (Notion Search):** 통과한 기사의 원문 링크(URL)를 고유 식별자(Key)로 삼아 노션 DB를 검색하여, 이미 저장된 기사이면 중단하고 검색 결과가 0건(신규)인 기사만 다음 단계로 보냅니다.
 4. **AI 가공 (Google Gemini AI):** Gemini 모델이 원문을 분석하여 ① 3줄 핵심 요약, ② 기사 감성(긍정/부정/중립), ③ 썸네일 생성용 영문 프롬프트를 JSON 포맷으로 구조화하여 1회 호출만으로 동시 출력합니다.
 ```json
 다음 기사 내용을 분석해서 답변해 줘.
@@ -29,21 +29,23 @@
   "image_prompt": "이 기사를 대표할 수 있는 썸네일 이미지를 AI로 그리기 위한 영문 프롬프트 1문장"
 }
 ```
-6. **데이터 파싱 (Parse JSON):** AI가 출력한 JSON 데이터를 각 속성별 변수로 분리합니다.
-7. **자동 저장 (Notion):** 제목, AI 요약문(텍스트), 원문 링크(URL), 발행일시(Date), 감성 분석 결과(태그), 썸네일 이미지(파일)를 노션 DB의 각 속성에 알맞게 매핑하여 최종 저장합니다. 썸네일 이미지의 경우 파싱된 영문 프롬프트를 URL 인코딩하여 Pollinations AI에 요청(GET)하고 썸네일 이미지를 생성 후 저장.
+5. **데이터 파싱 (Parse JSON):** AI가 출력한 JSON 데이터를 각 속성별 변수로 분리합니다.
+6. **자동 저장 (Notion):** 제목, AI 요약문(텍스트), 원문 링크(URL), 발행일시(Date), 감성 분석 결과(태그), 썸네일 이미지(파일)를 노션 DB의 각 속성에 알맞게 매핑하여 최종 저장합니다. 썸네일 이미지의 경우 파싱된 영문 프롬프트를 URL 인코딩하여 Pollinations AI에 요청(GET)하고 썸네일 이미지를 생성 후 저장.
 <img width="1339" height="798" alt="Image" src="https://github.com/user-attachments/assets/b6bc978a-5690-4074-bf1f-2066a84cef86" />
 
-- ![스크린샷](img/screenshot_make.png)
 ```mermaid
-TODO 위에 적힌 flow 대로 업데이트
 flowchart TD
-    sched(["스케줄 트리거 · 매일 자동 실행"]) --> rss["① RSS 뉴스 수집<br/>news.hada.io/rss/news"]
-    rss -->|"주제 필터: 제목에 AI·LLM·GPT·생성형 AI·오픈소스·인공지능 포함"| search["② Notion 중복 검색<br/>원문 id로 기존 항목 조회"]
-    search -->|"중복 방지: 검색결과 0건(신규)만 통과"| gemini["③ Gemini 요약 (gemini-3.1-flash-lite)<br/>→ JSON: summary · sentiment · image_prompt"]
-    gemini --> parse["④ JSON 파싱"]
-    parse --> notion["⑤ Notion DB 페이지 생성<br/>title · summary · sentiment · date · 원문 url · id · img"]
-    parse -->|"image_prompt"| poll["pollinations.ai<br/>프롬프트 → 썸네일 이미지 URL"]
-    poll -->|"img URL"| notion
+    sched(["스케줄 트리거 · 매일 10:00 KST 자동 실행"]) --> rss["RSS 뉴스 수집<br/>news.hada.io/rss/news"]
+    rss --> topic{"주제 필터<br/>제목에 AI·인공지능·생성형 AI·LLM·GPT·오픈소스 포함?"}
+    topic -->|"미포함"| drop(["제외"])
+    topic -->|"포함"| search["Notion 중복 검색<br/>원문 URL을 id로 기존 항목 조회"]
+    search --> dup{"신규 여부<br/>검색결과 0건?"}
+    dup -->|"중복"| drop
+    dup -->|"신규"| gemini["Gemini 요약 · 1회 호출<br/>summary · sentiment · image_prompt 동시 출력"]
+    gemini --> parse["JSON 파싱"]
+    parse --> notion["Notion DB 페이지 생성<br/>title · summary · sentiment · date · url · id · img"]
+    parse -->|"image_prompt"| poll["Pollinations AI<br/>프롬프트 URL 인코딩 후 썸네일 생성"]
+    poll -->|"이미지 URL"| notion
 
     search -.->|"실패 시 Break: 재시도 2회 / 15분 간격"| err(("에러 처리"))
     gemini -.-> err
@@ -77,14 +79,13 @@ flowchart TD
 ---
 
 ## 4. 팀 역할 및 개인별 작업 요약
-TODO github issue 보고 업데이트 필요
 ### Workflow 자동화
-- [김재은]
-- [박정욱]
-- [박찬웅]
-### AI 요약 프롬프트 / API
-- [조민기]
-- [이태규]
+- **김재은:** Make flow 설계 환경 세팅 최종 연동, 요약 프롬프트, notion 연결 url/date/요약/감정/썸네/id 기반, pollinations 연결
+- **박정욱:** RSS 수집 소스 선정
+- **박찬웅:** notion 연결 테스트, 요약/url/guid 기반
+### API
+- **조민기:** 무료 API 대체 API 조사
+- **이태규:** n8n 테스트, 무료 LLM/이미지 API 조사
 
 ---
 
